@@ -1,0 +1,91 @@
+MAMBA_ROOT_PREFIX is set to: /home/triznam/.conda
+mamba (miniforge3) v25.9.1 loaded, to start type '[32mstart-mamba[0m'
+Then, if you want to use the base env, type '[32mmamba activate base[0m'
++ Thu Nov 5 00:16:41 EST 2026 job get_image_dimensions started in sThC.q with jobID=15619253 on compute-75-05
++ NSLOTS = 12
+Processing 120 images with 12 threads
+Wrote nara_reel_tif_image_dimensions.csv
+= Thu Nov 5 00:16:47 EST 2026 job get_image_dimensions done
+MAMBA_ROOT_PREFIX is set to: /home/triznam/.conda
+mamba (miniforge3) v25.9.1 loaded, to start type '[32mstart-mamba[0m'
+Then, if you want to use the base env, type '[32mmamba activate base[0m'
++ Thu Nov 5 00:17:19 EST 2026 job get_image_dimensions started in sThC.q with jobID=15619259 on compute-75-07
++ NSLOTS = 12
+Processing 75804 images with 12 threads
+1000/75804 done
+2000/75804 done
+3000/75804 done
+4000/75804 done
+5000/75804 done
+6000/75804 done
+7000/75804 done
+8000/75804 done
+9000/75804 done
+10000/75804 done
+11000/75804 done
+12000/75804 done
+13000/75804 done
+14000/75804 done
+15000/75804 done
+16000/75804 done
+17000/75804 done
+18000/75804 done
+19000/75804 done
+20000/75804 done
+21000/75804 done
+22000/75804 done
+23000/75804 done
+24000/75804 done
+25000/75804 done
+26000/75804 done
+27000/75804 done
+28000/75804 done
+29000/75804 done
+30000/75804 done
+31000/75804 done
+32000/75804 done
+33000/75804 done
+34000/75804 done
+35000/75804 done
+36000/75804 done
+37000/75804 done
+38000/75804 done
+39000/75804 done
+40000/75804 done
+41000/75804 done
+42000/75804 done
+43000/75804 done
+44000/75804 done
+45000/75804 done
+46000/75804 done
+47000/75804 done
+48000/75804 done
+49000/75804 done
+50000/75804 done
+51000/75804 done
+52000/75804 done
+53000/75804 done
+54000/75804 done
+55000/75804 done
+56000/75804 done
+57000/75804 done
+58000/75804 done
+59000/75804 done
+60000/75804 done
+61000/75804 done
+62000/75804 done
+63000/75804 done
+64000/75804 done
+65000/75804 done
+66000/75804 done
+67000/75804 done
+68000/75804 done
+69000/75804 done
+70000/75804 done
+71000/75804 done
+72000/75804 done
+73000/75804 done
+74000/75804 done
+75000/75804 done
+Wrote nara_reel_tif_image_dimensions.csv
+= Thu Nov 5 00:44:45 EST 2026 job get_image_dimensions done

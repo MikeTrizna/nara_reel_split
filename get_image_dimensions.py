@@ -18,7 +18,7 @@ import fsspec
 from PIL import Image
 
 INPUT_CSV = "nara_revolutionary_war_pension_microfilm_reels.csv"
-OUTPUT_CSV = "image_dimensions.csv"
+OUTPUT_CSV = "nara_reel_tif_image_dimensions.csv"
 MAX_RETRIES = 4
 
 Image.MAX_IMAGE_PIXELS = None  # these are big scans; we never decode pixels, so skip the warning

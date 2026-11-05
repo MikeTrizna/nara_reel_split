@@ -1,0 +1,25 @@
+# /bin/sh
+# ----------------Parameters---------------------- #
+#$ -S /bin/sh
+#$ -pe mthread 12
+#$ -q sThC.q
+#$ -l mres=72G,h_data=6G,h_vmem=6G
+#$ -cwd
+#$ -j y
+#$ -N get_image_dimensions
+#$ -o get_image_dimensions.log
+#$ -m bea
+#
+# ----------------Modules------------------------- #
+#
+module load tools/mamba
+start-mamba
+mamba activate jupyter
+# ----------------Your Commands------------------- #
+#
+echo + `date` job $JOB_NAME started in $QUEUE with jobID=$JOB_ID on $HOSTNAME
+echo + NSLOTS = $NSLOTS
+#
+python get_image_dimensions.py --threads $NSLOTS
+#
+echo = `date` job $JOB_NAME done
