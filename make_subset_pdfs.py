@@ -13,11 +13,11 @@ number everywhere except reel 1824, where the filenames skip one number, so
 this script looks each one up to get the PDF's own page number (and names the
 output files with those).
 
-How it runs: every output PDF is its own task, so all workers stay busy even
-when only one or two reels are left. Tasks are started largest first so a big
-piece doesn't end up running alone at the end. Pages are copied with pikepdf
-(the qpdf C++ library), which copies the scanned images byte for byte without
-holding the whole reel in memory.
+How it runs: each worker takes one reel, opens it once, and writes all of that
+reel's pieces. Opening is the slow part (several minutes per ~12 GB reel on the
+HPC) while copying a piece takes seconds, so a reel must never be opened more
+than once. Pages are copied with pikepdf (the qpdf C++ library), which copies
+the scanned images byte for byte without holding the whole reel in memory.
 
 Requires: pip install pikepdf
 
@@ -56,29 +56,33 @@ def load_reel_maps(path):
     return naid, page_map
 
 
-def write_subset(src, first, last, out):
-    """Copy pages first..last (1-based, inclusive) of src into out.
+def process_reel(src, pieces):
+    """Open src once and write each (first, last, out) piece (1-based, inclusive pages).
 
-    Returns (seconds spent opening src, seconds spent writing out), to show
-    where the time goes.
+    Returns (seconds to open, [(out name, error or None), ...]).
     """
     t0 = time.time()
+    results = []
     with pikepdf.open(src) as reel:
         t_open = time.time() - t0
+        print(f"opened {src.name} in {t_open:.0f}s", flush=True)
         n = len(reel.pages)
-        if last > n:
-            raise ValueError(f"{src.name} has {n} pages, need {first}-{last}")
-        subset = pikepdf.new()
-        subset.pages.extend(reel.pages[first - 1 : last])
-        tmp = out.with_suffix(".tmp")
-        # Copy the image streams as-is: no decompressing and recompressing.
-        subset.save(tmp, stream_decode_level=pikepdf.StreamDecodeLevel.none)
-    tmp.replace(out)  # so an interrupted job never leaves a truncated PDF
-    return t_open, time.time() - t0 - t_open
+        for first, last, out in pieces:
+            if last > n:
+                results.append((out.name, f"{src.name} has {n} pages, need {first}-{last}"))
+                continue
+            subset = pikepdf.new()
+            subset.pages.extend(reel.pages[first - 1 : last])
+            tmp = out.with_suffix(".tmp")
+            # Copy the image streams as-is: no decompressing and recompressing.
+            subset.save(tmp, stream_decode_level=pikepdf.StreamDecodeLevel.none)
+            tmp.replace(out)  # so an interrupted job never leaves a truncated PDF
+            results.append((out.name, None))
+    return t_open, results
 
 
-def plan_tasks(args):
-    """Build the list of (src, first, last, out) still to do, plus skip/missing counts."""
+def plan_jobs(args):
+    """Return ({src: [(first, last, out), ...]} still to do, n skipped, [missing reels])."""
     naid_of, page_map = load_reel_maps(args.dims_csv)
 
     by_reel = defaultdict(list)
@@ -87,7 +91,7 @@ def plan_tasks(args):
             if row["cut_type"] != SKIP_CUT_TYPE:
                 by_reel[int(row["reel"])].append(row)
 
-    tasks, skipped, missing = [], 0, []
+    jobs, skipped, missing = {}, 0, []
     for reel in sorted(by_reel)[: args.limit]:
         naid = naid_of[reel]
         src = args.pdf_dir / f"{naid}.pdf"
@@ -95,6 +99,7 @@ def plan_tasks(args):
             print(f"MISSING {src} (reel {reel})", file=sys.stderr)
             missing.append(reel)
             continue
+        pieces = []
         for row in by_reel[reel]:
             first = page_map[reel][int(row["page_start"])]
             last = page_map[reel][int(row["page_end"])]
@@ -102,11 +107,10 @@ def plan_tasks(args):
             if out.exists() and not args.overwrite:
                 skipped += 1
             else:
-                tasks.append((src, first, last, out))
-
-    # Largest pieces first, so the slowest ones don't straggle at the end.
-    tasks.sort(key=lambda t: t[2] - t[1], reverse=True)
-    return tasks, skipped, missing
+                pieces.append((first, last, out))
+        if pieces:
+            jobs[src] = pieces
+    return jobs, skipped, missing
 
 
 def main():
@@ -116,30 +120,38 @@ def main():
     ap.add_argument("--splits", default=SPLITS_CSV)
     ap.add_argument("--dims-csv", default=DIMS_CSV)
     ap.add_argument("--threads", type=int, default=1,
-                    help="number of parallel worker processes, one output PDF each (default 1)")
+                    help="number of parallel worker processes, one reel each (default 1)")
     ap.add_argument("--limit", type=int, help="only process the first N reels (for testing)")
     ap.add_argument("--overwrite", action="store_true", help="redo files that already exist")
     args = ap.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    tasks, skipped, missing = plan_tasks(args)
-    print(f"{len(tasks)} PDFs to write, {skipped} already exist, {len(missing)} reels missing, "
-          f"{args.threads} workers", flush=True)
+    jobs, skipped, missing = plan_jobs(args)
+    n_pieces = sum(len(p) for p in jobs.values())
+    print(f"{len(jobs)} reels / {n_pieces} PDFs to write, {skipped} already exist, "
+          f"{len(missing)} reels missing, {args.threads} workers", flush=True)
 
     start = time.time()
     written, failed = 0, []
     with ProcessPoolExecutor(max_workers=args.threads) as pool:
-        futures = {pool.submit(write_subset, *task): task for task in tasks}
+        futures = {pool.submit(process_reel, src, pieces): src for src, pieces in jobs.items()}
         for i, future in enumerate(as_completed(futures), 1):
-            out = futures[future][3]
+            src = futures[future]
             try:
-                t_open, t_save = future.result()
-                written += 1
-                status = f"ok (open {t_open:.0f}s, copy+save {t_save:.0f}s)"
-            except Exception as e:  # report and keep going; rerun to retry just the failures
-                failed.append(out.name)
-                status = f"FAILED: {e}"
-            print(f"[{i}/{len(tasks)} {time.time() - start:.0f}s] {out.name} {status}", flush=True)
+                t_open, results = future.result()
+            except Exception as e:  # e.g. an unreadable reel; rerun to retry just the failures
+                failed += [out.name for _, _, out in jobs[src]]
+                print(f"[reel {i}/{len(jobs)} {time.time() - start:.0f}s] {src.name} FAILED: {e}", flush=True)
+                continue
+            for name, error in results:
+                if error:
+                    failed.append(name)
+                    print(f"  {name} FAILED: {error}", flush=True)
+                else:
+                    written += 1
+            ok = sum(error is None for _, error in results)
+            print(f"[reel {i}/{len(jobs)} {time.time() - start:.0f}s] {src.name}: "
+                  f"{ok}/{len(results)} written (open took {t_open:.0f}s)", flush=True)
 
     print(f"Wrote {written}, skipped {skipped} existing, {len(failed)} failed, "
           f"{len(missing)} reels missing a PDF")
