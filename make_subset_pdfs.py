@@ -57,17 +57,24 @@ def load_reel_maps(path):
 
 
 def write_subset(src, first, last, out):
-    """Copy pages first..last (1-based, inclusive) of src into out. Returns out."""
+    """Copy pages first..last (1-based, inclusive) of src into out.
+
+    Returns (seconds spent opening src, seconds spent writing out), to show
+    where the time goes.
+    """
+    t0 = time.time()
     with pikepdf.open(src) as reel:
+        t_open = time.time() - t0
         n = len(reel.pages)
         if last > n:
             raise ValueError(f"{src.name} has {n} pages, need {first}-{last}")
         subset = pikepdf.new()
         subset.pages.extend(reel.pages[first - 1 : last])
         tmp = out.with_suffix(".tmp")
-        subset.save(tmp)
+        # Copy the image streams as-is: no decompressing and recompressing.
+        subset.save(tmp, stream_decode_level=pikepdf.StreamDecodeLevel.none)
     tmp.replace(out)  # so an interrupted job never leaves a truncated PDF
-    return out
+    return t_open, time.time() - t0 - t_open
 
 
 def plan_tasks(args):
@@ -126,9 +133,9 @@ def main():
         for i, future in enumerate(as_completed(futures), 1):
             out = futures[future][3]
             try:
-                future.result()
+                t_open, t_save = future.result()
                 written += 1
-                status = "ok"
+                status = f"ok (open {t_open:.0f}s, copy+save {t_save:.0f}s)"
             except Exception as e:  # report and keep going; rerun to retry just the failures
                 failed.append(out.name)
                 status = f"FAILED: {e}"
